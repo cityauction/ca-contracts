@@ -36,7 +36,6 @@ contract CityNFT is ERC721Royalty, Ownable {
         _setDefaultRoyalty(receiver, feeNumerator);
     }
 
-
     function getAuctionStatus(uint256 _tokenId) public view returns (AuctionStatus) {
         // 3个月等待期；
         // 拍卖中；
@@ -62,12 +61,16 @@ contract CityNFT is ERC721Royalty, Ownable {
     }
 
     // 创建一个新的NFT拍卖
-    function createAuction(uint256 _tokenId, uint256 _reservePrice,string memory _place) external onlyOwner {
+    function createAuction(
+        uint256 _tokenId,
+        uint256 _reservePrice,
+        string memory _place
+    ) external onlyOwner {
         require(_reservePrice > 0, "Reserve price must be greater than zero");
         require(auctions[_tokenId].endTime == 0, "Auction already exists for this NFT");
         auctions[_tokenId] = Auction({
             tokenId: _tokenId,
-            place:_place,
+            place: _place,
             reservePrice: _reservePrice,
             endTime: block.timestamp - AUCTION_INTERVAL,
             topBid: 0,
@@ -76,7 +79,6 @@ contract CityNFT is ERC721Royalty, Ownable {
         });
         emit AuctionCreated(_tokenId, _reservePrice, auctions[_tokenId].endTime);
     }
-
 
     // 提交一个拍卖出价
     function placeBid(uint256 _tokenId) external payable {
@@ -99,17 +101,18 @@ contract CityNFT is ERC721Royalty, Ownable {
     }
 
     // 结束拍卖并处理NFT
+
     function endAuction(uint256 _tokenId) external {
         Auction storage auction = auctions[_tokenId];
         require(auctions[_tokenId].endTime != 0, "Auction not exists for this NFT");
         AuctionStatus status = getAuctionStatus(_tokenId);
-        require(status == AuctionStatus.ended, "Auction has not yet ended");
-        (address royaltyReceiver, uint256 royaltyAmount)=royaltyInfo(_tokenId,auction.topBid);
+        require(status == AuctionStatus.ended, "Auction has not ended");
+        (address royaltyReceiver, uint256 royaltyAmount) = royaltyInfo(_tokenId, auction.topBid);
         if (_exists(_tokenId)) {
             address owner = ownerOf(_tokenId);
             (bool success1, ) = royaltyReceiver.call{value: royaltyAmount}("");
-            (bool success2, ) = owner.call{value:auction.topBid-royaltyAmount}("");
-            require(success1&&success2, "Unable to send to royaltyReceiver or owner");
+            (bool success2, ) = owner.call{value: auction.topBid - royaltyAmount}("");
+            require(success1 && success2, "Unable to send to royaltyReceiver or owner");
             _transfer(owner, auction.topBidder, _tokenId);
         } else {
             (bool success, ) = royaltyReceiver.call{value: auction.topBid}("");
@@ -117,19 +120,14 @@ contract CityNFT is ERC721Royalty, Ownable {
             _mint(auction.topBidder, _tokenId);
         }
         emit AuctionEnded(_tokenId, auction.topBidder, auction.topBid);
-        auctions[_tokenId] = Auction({
-            tokenId: _tokenId,
-            place:auction.place,
-            reservePrice: auction.topBid*auction.topBid/(auction.topBid-royaltyAmount),
-            endTime: block.timestamp,
-            topBid: 0,
-            topBidder: address(0),
-            latestBidTime: 0
-        });
-        
+        auction.endTime = block.timestamp;
+        auction.reservePrice = (auction.topBid * auction.topBid) / (auction.topBid - royaltyAmount);
+        auction.topBid = 0;
+        auction.topBidder = address(0);
+        auction.latestBidTime = 0;
     }
 
-   function getPlaceName(uint256 _tokenId) external view returns (string memory) {
+    function getPlaceName(uint256 _tokenId) external view returns (string memory) {
         require(_exists(_tokenId), "Token ID does not exist");
         return auctions[_tokenId].place;
     }
