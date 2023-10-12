@@ -7,8 +7,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "hardhat/console.sol";
 
 contract CityPassNFT is ERC721, Ownable {
-
-    // 分润 
+    // fee distribution
     address public protocolFeeDestination;
     address public holderAndReferralFeeDestination;
     uint256 public protocolFeePercent;
@@ -16,13 +15,13 @@ contract CityPassNFT is ERC721, Ownable {
     uint256 public holderFeePercent;
     uint256 public referralFeePercent;
 
-    IERC721 public cityNFT; // cityNFT合约
+    IERC721 public cityNFT; // cityNFT contract
 
-    uint256 public tokenNum = 0; // 自增tokenId
+    uint256 public tokenNum = 0; // minted amount of tokenId
 
-    mapping(uint256 => uint256) public passCity; // 映射：tokenId => cityId
-    mapping(uint256 => uint256) public cityTokenCounts; // 存储每个分类下的 NFT 数量
-    mapping(uint256 => mapping(address => uint256)) public passBalance;
+    mapping(uint256 => uint256) public passCity; // tokenId => cityId store cityPass under specific city
+    mapping(uint256 => uint256) public cityTokenCounts; // cityID => cityPass Counts
+    mapping(uint256 => mapping(address => uint256)) public passBalance; // cityID => addr => cityPassCount
 
     constructor(address _cityNFT) ERC721("CityPassNFT", "CityPassNFT") {
         cityNFT = IERC721(_cityNFT);
@@ -43,8 +42,8 @@ contract CityPassNFT is ERC721, Ownable {
     ) public view returns (uint256 price, uint256 protocolFee, uint256 cityFee, uint256 holderFee) {
         price = getPrice(supply, amount);
         protocolFee = (price * protocolFeePercent) / 1 ether;
-        cityFee = price * cityFeePercent / 1 ether;
-        holderFee = price * holderFeePercent / 1 ether;
+        cityFee = (price * cityFeePercent) / 1 ether;
+        holderFee = (price * holderFeePercent) / 1 ether;
     }
 
     function getMintPrices(uint256 cityId, uint256 amount) public view returns (uint256) {
@@ -56,51 +55,67 @@ contract CityPassNFT is ERC721, Ownable {
     }
 
     function getMintPriceAfterFee(uint256 cityId, uint256 amount) public view returns (uint256) {
-        (uint256 price, uint256 protocolFee, uint256 cityFee, uint256 holderFee) =getPriceAndFee(cityTokenCounts[cityId], amount);
+        (uint256 price, uint256 protocolFee, uint256 cityFee, uint256 holderFee) = getPriceAndFee(
+            cityTokenCounts[cityId],
+            amount
+        );
         return price + protocolFee + cityFee + holderFee;
     }
 
     function getBurnPriceAfterFee(uint256 cityId, uint256 amount) public view returns (uint256) {
-       (uint256 price, uint256 protocolFee, uint256 cityFee, uint256 holderFee) =getPriceAndFee(cityTokenCounts[cityId]-amount, amount);
+        (uint256 price, uint256 protocolFee, uint256 cityFee, uint256 holderFee) = getPriceAndFee(
+            cityTokenCounts[cityId] - amount,
+            amount
+        );
         return price - protocolFee - cityFee - holderFee;
     }
 
     function mintNFT(address to, uint256 cityId) internal {
         require(cityNFT.ownerOf(cityId) != address(0), "Token ID does not exist");
         tokenNum += 1;
-        passCity[tokenNum] = cityId; // 将 NFT 与分类关联
+        passCity[tokenNum] = cityId;
         _mint(to, tokenNum);
     }
 
     function burnNFT(uint256 tokenId) internal {
         require(_isApprovedOrOwner(msg.sender, tokenId), "You don't own this NFT");
-        uint256 cityId = passCity[tokenId]; // 获取 NFT 的分类
+        uint256 cityId = passCity[tokenId];
         require(cityTokenCounts[cityId] > 0, "Invalid cityId ID");
-        _burn(tokenId); // 销毁 NFT
+        _burn(tokenId); // burn citypass
     }
 
     function bulkMintNFT(uint256 cityId, uint256 amount) public payable {
-        (uint256 price, uint256 protocolFee, uint256 cityFee, uint256 holderFee) =getPriceAndFee(cityTokenCounts[cityId], amount);
+        (uint256 price, uint256 protocolFee, uint256 cityFee, uint256 holderFee) = getPriceAndFee(
+            cityTokenCounts[cityId],
+            amount
+        );
         require(msg.value >= price + protocolFee + cityFee + holderFee, "Insufficient payment");
         for (uint256 i = 0; i < amount; i++) {
             mintNFT(msg.sender, cityId);
         }
-        (bool success1, ) = protocolFeeDestination.call{value: protocolFee - (protocolFee * referralFeePercent / 1 ether)}("");
+        (bool success1, ) = protocolFeeDestination.call{
+            value: protocolFee - ((protocolFee * referralFeePercent) / 1 ether)
+        }("");
         (bool success2, ) = cityNFT.ownerOf(cityId).call{value: cityFee}("");
-        (bool success3, ) = holderAndReferralFeeDestination.call{value: holderFee + (protocolFee * referralFeePercent / 1 ether) }("");
+        (bool success3, ) = holderAndReferralFeeDestination.call{
+            value: holderFee + ((protocolFee * referralFeePercent) / 1 ether)
+        }("");
         require(success1 && success2 && success3, "Unable to send funds");
     }
 
-    function bulkBurnNFT(uint256[] memory tokenIds,uint256 cityId) public {
+    function bulkBurnNFT(uint256[] memory tokenIds, uint256 cityId) public {
         uint256 amount = tokenIds.length;
-        (uint256 price, uint256 protocolFee, uint256 cityFee, uint256 holderFee) =getPriceAndFee(cityTokenCounts[cityId], amount);
+        (uint256 price, uint256 protocolFee, uint256 cityFee, uint256 holderFee) = getPriceAndFee(
+            cityTokenCounts[cityId],
+            amount
+        );
         for (uint256 i = 0; i < amount; i++) {
             burnNFT(tokenIds[i]);
         }
         (bool success1, ) = msg.sender.call{value: price - protocolFee - cityFee - holderFee}("");
-        (bool success2, ) = protocolFeeDestination.call{value: protocolFee }("");
+        (bool success2, ) = protocolFeeDestination.call{value: protocolFee}("");
         (bool success3, ) = cityNFT.ownerOf(cityId).call{value: cityFee}("");
-        (bool success4, ) = holderAndReferralFeeDestination.call{value: holderFee }("");
+        (bool success4, ) = holderAndReferralFeeDestination.call{value: holderFee}("");
 
         require(success1 && success2 && success3 && success4, "Unable to send funds");
     }

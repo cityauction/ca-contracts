@@ -10,23 +10,23 @@ contract CityNFT is ERC721Royalty, Ownable {
     event BidPlaced(uint256 indexed tokenId, address indexed bidder, uint256 bidAmount);
     event AuctionEnded(uint256 indexed tokenId, address indexed winner, uint256 winningBid);
     enum AuctionStatus {
-        pending, // 等待期
-        progress, // 拍卖进行中
-        ended //拍卖结束
+        pending, // not open for auction
+        ongoing, // auction ongoing
+        ended //auction ended
     }
     struct Auction {
-        uint256 tokenId; // NFT的ID
-        string place;
-        uint256 reservePrice; // 保留价
-        uint256 endTime; // 上次拍卖结束时间
-        uint256 topBid; // 最高出价
-        address topBidder; // 最高出价人
-        uint256 latestBidTime; //最新出价时间
+        uint256 tokenId; // NFT ID
+        string city;
+        uint256 reservePrice; // starting price
+        uint256 endTime; // last auction end time
+        uint256 topBid; // highest bid price
+        address topBidder; // top bidder
+        uint256 latestBidTime; //most recent bid time
     }
-    uint256 public constant AUCTION_DURATION = 1 days; // 拍卖周期为1天
-    uint256 public constant AUCTION_INTERVAL = 90 days; // 三个月一个拍卖周期
-    // 存储每个拍卖的信息
-    mapping(uint256 => Auction) public auctions;
+    uint256 public constant AUCTION_DURATION = 1 days; // city auction lasts for 1 day
+    uint256 public constant AUCTION_INTERVAL = 90 days; // auction interval is 90 days
+
+    mapping(uint256 => Auction) public auctions; // cityID => auction
 
     constructor(address _receiver, uint96 feeNumerator) ERC721("City", "city") {
         _setDefaultRoyalty(_receiver, feeNumerator);
@@ -37,14 +37,14 @@ contract CityNFT is ERC721Royalty, Ownable {
     }
 
     function getAuctionStatus(uint256 _tokenId) public view returns (AuctionStatus) {
-        // 3个月等待期；
-        // 拍卖中；
+        // city is put up for auction after every 3 month；
+        // ongoing auction；
         Auction storage auction = auctions[_tokenId];
         require(auctions[_tokenId].endTime != 0, "Auction not exists for this NFT");
 
         uint256 diff = block.timestamp - auction.endTime;
         if (diff > AUCTION_INTERVAL && diff < (AUCTION_INTERVAL + AUCTION_DURATION)) {
-            return AuctionStatus.progress;
+            return AuctionStatus.ongoing;
         }
 
         if (diff > (AUCTION_INTERVAL + AUCTION_DURATION)) {
@@ -54,23 +54,23 @@ contract CityNFT is ERC721Royalty, Ownable {
                     return AuctionStatus.ended;
                 }
             }
-            // 流拍
-            return AuctionStatus.progress;
+            // auction failed
+            return AuctionStatus.ongoing;
         }
         return AuctionStatus.pending;
     }
 
-    // 创建一个新的NFT拍卖
+    // create a new auction
     function createAuction(
         uint256 _tokenId,
         uint256 _reservePrice,
-        string memory _place
+        string memory _city
     ) external onlyOwner {
         require(_reservePrice > 0, "Reserve price must be greater than zero");
         require(auctions[_tokenId].endTime == 0, "Auction already exists for this NFT");
         auctions[_tokenId] = Auction({
             tokenId: _tokenId,
-            place: _place,
+            city: _city,
             reservePrice: _reservePrice,
             endTime: block.timestamp - AUCTION_INTERVAL,
             topBid: 0,
@@ -80,7 +80,7 @@ contract CityNFT is ERC721Royalty, Ownable {
         emit AuctionCreated(_tokenId, _reservePrice, auctions[_tokenId].endTime);
     }
 
-    // 提交一个拍卖出价
+    // place a bid
     function placeBid(uint256 _tokenId) external payable {
         Auction storage auction = auctions[_tokenId];
         require(auctions[_tokenId].endTime != 0, "Auction not exists for this NFT");
@@ -100,7 +100,7 @@ contract CityNFT is ERC721Royalty, Ownable {
         emit BidPlaced(_tokenId, msg.sender, msg.value);
     }
 
-    // 结束拍卖并处理NFT
+    // end an auction, winner gets NFT
 
     function endAuction(uint256 _tokenId) external {
         Auction storage auction = auctions[_tokenId];
