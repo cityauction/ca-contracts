@@ -73,7 +73,7 @@ describe("CityNFT", () => {
     );
     const auction = await citynft.auctions(1);
     expect(auction.tokenId).eq(1);
-    expect(auction.place).eq("Hongkong");
+    expect(auction.city).eq("Hongkong");
     expect(auction.reservePrice).eq(e18(1));
   });
   it("should allow placeBid", async () => {
@@ -136,21 +136,29 @@ describe("CityNFT", () => {
     await citynft.createAuction(1, e18(1), "Hongkong");
     await expect(citynft.connect(user1).endAuction(1)).revertedWith("Auction has not ended");
     expect(await citynft.getAuctionStatus(1)).eq(1);
+
     await citynft.connect(user2).placeBid(1, { value: e18(2) });
+
     await ethers.provider.send("evm_increaseTime", [60 * 60 * 24]);
     await ethers.provider.send("evm_mine", []);
     expect(await citynft.getAuctionStatus(1)).eq(2);
+
     const royaltyReceiverBal = await getEthBalance(royaltyReceiver.address);
+
     await citynft.connect(user1).endAuction(1);
+
     const royaltyReceiverBal2 = await getEthBalance(royaltyReceiver.address);
+
     // first mint mintFee
     expect(royaltyReceiverBal2.sub(royaltyReceiverBal)).eq(e18(2));
+
     const auction = await citynft.auctions(1);
     expect(auction.topBid).eq(0);
     expect(auction.latestBidTime).eq(0);
     // 2/0.95~=2.105
     expect(auction.reservePrice).gt(e18(21).div(10));
     expect(auction.reservePrice).lt(e18(211).div(100));
+
     // pending
     expect(await citynft.getAuctionStatus(1)).eq(0);
     await expect(citynft.connect(user1).endAuction(1)).revertedWith("Auction has not ended");
@@ -163,7 +171,9 @@ describe("CityNFT", () => {
     await citynft.connect(user1).placeBid(1, { value: e18(3) });
     await ethers.provider.send("evm_increaseTime", [60 * 60 * 24]);
     await ethers.provider.send("evm_mine", []);
+
     expect(await citynft.getAuctionStatus(1)).eq(2);
+
     const nftowner = await citynft.ownerOf(1);
     expect(nftowner).eq(user2.address);
     const nftOwnerBal = await getEthBalance(nftowner);
@@ -172,6 +182,7 @@ describe("CityNFT", () => {
     expect(await citynft.ownerOf(1)).eq(user1.address);
     // 3*0.95 =2.85
     expect((await getEthBalance(nftowner)).sub(nftOwnerBal)).eq(e18(285).div(100));
+
     // royalty
     expect((await getEthBalance(royaltyReceiver.address)).sub(_royaltyReceiverBal)).eq(
       e18(15).div(100)
