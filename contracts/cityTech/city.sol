@@ -3,7 +3,10 @@ pragma solidity ^0.8.0;
 
 import {ERC721, ERC721Royalty} from "@openzeppelin/contracts/token/ERC721/extensions/ERC721Royalty.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "hardhat/console.sol";
+
+interface ICityMarket {
+    function updateCityOfferAfterTransfer(uint256 tokenId) external;
+}
 
 contract CityNFT is ERC721Royalty, Ownable {
     event AuctionCreated(uint256 indexed tokenId, uint256 reservePrice, uint256 endTime);
@@ -28,8 +31,14 @@ contract CityNFT is ERC721Royalty, Ownable {
 
     mapping(uint256 => Auction) public auctions; // cityID => auction
 
+    ICityMarket public cityMarket;
+
     constructor(address _receiver, uint96 feeNumerator) ERC721("City", "city") {
         _setDefaultRoyalty(_receiver, feeNumerator);
+    }
+
+    function setCityMarket(address _cityMarket) external onlyOwner {
+        cityMarket = ICityMarket(_cityMarket) ;
     }
 
     function setDefaultRoyalty(address receiver, uint96 feeNumerator) external onlyOwner {
@@ -107,6 +116,7 @@ contract CityNFT is ERC721Royalty, Ownable {
         require(auctions[_tokenId].endTime != 0, "Auction not exists for this NFT");
         AuctionStatus status = getAuctionStatus(_tokenId);
         require(status == AuctionStatus.ended, "Auction has not ended");
+
         (address royaltyReceiver, uint256 royaltyAmount) = royaltyInfo(_tokenId, auction.topBid);
         if (_exists(_tokenId)) {
             address owner = ownerOf(_tokenId);
@@ -129,6 +139,21 @@ contract CityNFT is ERC721Royalty, Ownable {
 
     function getPlaceName(uint256 _tokenId) external view returns (string memory) {
         require(_exists(_tokenId), "Token ID does not exist");
-        return auctions[_tokenId].place;
+        return auctions[_tokenId].city;
+    }
+
+    function exists(uint256 _tokenId) external view returns (bool){
+        return _exists(_tokenId);
+    }
+
+    function _afterTokenTransfer(
+        address from,
+        address to,
+        uint256 tokenId
+    ) internal virtual override(ERC721) {
+        super._afterTokenTransfer(from, to, tokenId);
+        if (from != to && address(cityMarket)!=address(0)) {
+            cityMarket.updateCityOfferAfterTransfer(tokenId);
+        }
     }
 }
