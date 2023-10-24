@@ -1,6 +1,6 @@
 {
   "name": "ca-contracts",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "files": [
     "typechain",
     "artifacts",
