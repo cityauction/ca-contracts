@@ -86,4 +86,72 @@ describe("CityMarket", () => {
     expect(order.seller).eq(user2.address);
     expect(order.minValue).eq(0);
   });
+
+  it("buyCity", async () => {
+    await expect(cityMarket.buyCity(2)).revertedWith("Not for sale");
+
+    const tokenId = 1;
+    await createCity(tokenId, "Hangzhou", user1);
+    await citynft.connect(user1).approve(cityMarket.address, tokenId);
+    await cityMarket.connect(user1).offerCityForSale(tokenId, e18(1));
+    await expect(cityMarket.buyCity(tokenId)).revertedWith("less than the minimum price");
+    await expect(cityMarket.connect(user1).buyCity(tokenId, { value: e18(1) })).revertedWith(
+      "You cannot buy a city you own"
+    );
+    await cityMarket.connect(user2).buyCity(tokenId, { value: e18(1) });
+    const order = await cityMarket.citiesOfferedForSale(tokenId);
+    expect(order.isForSale).eq(false);
+    expect(order.seller).eq(user2.address);
+  });
+
+  it("enterBidForCity", async () => {
+    await expect(cityMarket.enterBidForCity(1)).revertedWith(
+      "ERC721: owner query for nonexistent token"
+    );
+    const tokenId = 1;
+    await createCity(tokenId, "Hangzhou", user1);
+    await expect(cityMarket.enterBidForCity(1)).revertedWith("he sent ether is zero");
+    await cityMarket.enterBidForCity(1, { value: e18(2) });
+    await expect(cityMarket.enterBidForCity(1, { value: e18(2) })).revertedWith(
+      "Your bid is lower than the current highest bid"
+    );
+    await cityMarket.enterBidForCity(1, { value: e18(3) });
+    const bal = await getEthBalance(owner.address);
+    await cityMarket.connect(user2).enterBidForCity(1, { value: e18(31).div(10) });
+    const bal2 = await getEthBalance(owner.address);
+    expect(bal2.sub(bal)).eq(e18(3));
+  });
+
+  it("cancelBidForCity", async () => {
+    await expect(cityMarket.cnacelBidForCity(1)).revertedWith(
+      "ERC721: owner query for nonexistent token"
+    );
+    const tokenId = 1;
+    await createCity(tokenId, "Hangzhou", user1);
+    await expect(cityMarket.cnacelBidForCity(1)).revertedWith("no bid");
+    await cityMarket.enterBidForCity(1, { value: e18(2) });
+    await expect(cityMarket.connect(user1).cnacelBidForCity(1)).revertedWith(
+      "You can only cancel your own bid"
+    );
+    await expect(cityMarket.cnacelBidForCity(1)).revertedWith("Minimum cancel interval");
+    await ethers.provider.send("evm_increaseTime", [60 * 60]);
+    await ethers.provider.send("evm_mine", []);
+    await cityMarket.cnacelBidForCity(1);
+  });
+  it("acceptBidForCity", async () => {
+    await expect(cityMarket.cnacelBidForCity(1)).revertedWith(
+      "ERC721: owner query for nonexistent token"
+    );
+    const tokenId = 1;
+    await createCity(tokenId, "Hangzhou", user1);
+    await expect(cityMarket.cnacelBidForCity(1)).revertedWith("no bid");
+    await cityMarket.enterBidForCity(1, { value: e18(2) });
+    await expect(cityMarket.connect(user1).cnacelBidForCity(1)).revertedWith(
+      "You can only cancel your own bid"
+    );
+    await expect(cityMarket.cnacelBidForCity(1)).revertedWith("Minimum cancel interval");
+    await ethers.provider.send("evm_increaseTime", [60 * 60]);
+    await ethers.provider.send("evm_mine", []);
+    await cityMarket.cnacelBidForCity(1);
+  });
 });
