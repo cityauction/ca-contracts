@@ -6,6 +6,8 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 
 interface ICityMarket {
     function updateCityOfferAfterTransfer(uint256 tokenId) external;
+
+    function citiesOfferedForSale(uint256 tokenId) external returns (bool);
 }
 
 contract CityNFT is ERC721Royalty, Ownable {
@@ -38,7 +40,7 @@ contract CityNFT is ERC721Royalty, Ownable {
     }
 
     function setCityMarket(address _cityMarket) external onlyOwner {
-        cityMarket = ICityMarket(_cityMarket) ;
+        cityMarket = ICityMarket(_cityMarket);
     }
 
     function setDefaultRoyalty(address receiver, uint96 feeNumerator) external onlyOwner {
@@ -142,7 +144,7 @@ contract CityNFT is ERC721Royalty, Ownable {
         return auctions[_tokenId].city;
     }
 
-    function exists(uint256 _tokenId) external view returns (bool){
+    function exists(uint256 _tokenId) external view returns (bool) {
         return _exists(_tokenId);
     }
 
@@ -152,8 +154,15 @@ contract CityNFT is ERC721Royalty, Ownable {
         uint256 tokenId
     ) internal virtual override(ERC721) {
         super._afterTokenTransfer(from, to, tokenId);
-        if (from != to && address(cityMarket)!=address(0)) {
+        if (from != to && address(cityMarket) != address(0)) {
             cityMarket.updateCityOfferAfterTransfer(tokenId);
         }
+    }
+
+    function approve(address to, uint256 tokenId) public virtual override {
+        if (to != address(cityMarket) && address(cityMarket) != address(0)) {
+            require(!cityMarket.citiesOfferedForSale(tokenId), "cancel sale first");
+        }
+        super.approve(to, tokenId);
     }
 }

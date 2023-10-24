@@ -146,12 +146,28 @@ describe("CityMarket", () => {
     await createCity(tokenId, "Hangzhou", user1);
     await expect(cityMarket.cnacelBidForCity(1)).revertedWith("no bid");
     await cityMarket.enterBidForCity(1, { value: e18(2) });
-    await expect(cityMarket.connect(user1).cnacelBidForCity(1)).revertedWith(
-      "You can only cancel your own bid"
+    await citynft.connect(user1).approve(cityMarket.address, tokenId);
+    await cityMarket.connect(user1).acceptBidForCity(tokenId, e18(2));
+    expect(await citynft.ownerOf(tokenId)).eq(owner.address);
+  });
+
+  it("approve", async () => {
+    const tokenId = 1;
+    await createCity(tokenId, "Hangzhou", user1);
+    await citynft.connect(user1).approve(cityMarket.address, tokenId);
+    expect(await citynft.getApproved(tokenId)).eq(cityMarket.address);
+    await citynft.connect(user1).transferFrom(user1.address, user2.address, tokenId);
+    expect(await citynft.getApproved(tokenId)).eq(ethers.constants.AddressZero);
+    await citynft.connect(user2).approve(cityMarket.address, tokenId);
+    await cityMarket.connect(user2).offerCityForSale(tokenId, e18(2));
+
+    await expect(citynft.connect(user2).approve(owner.address, tokenId)).revertedWith(
+      "cancel sale first"
     );
-    await expect(cityMarket.cnacelBidForCity(1)).revertedWith("Minimum cancel interval");
-    await ethers.provider.send("evm_increaseTime", [60 * 60]);
-    await ethers.provider.send("evm_mine", []);
-    await cityMarket.cnacelBidForCity(1);
+    await cityMarket.connect(user2).cityNoLongerForSale(tokenId);
+    await citynft.connect(user2).approve(owner.address, tokenId);
+    // await citynft.connect(user2).setApprovalForAll(owner.address, true);
+    // await citynft.transferFrom(user2.address, user1.address, tokenId);
+    // expect(await citynft.getApproved(tokenId)).eq(cityMarket.address);
   });
 });

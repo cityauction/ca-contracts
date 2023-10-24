@@ -57,6 +57,7 @@ contract CityMarket is Ownable {
                 0,
                 address(0)
             );
+            emit CityNoLongerForSale(tokenId);
         }
     }
 
@@ -158,9 +159,10 @@ contract CityMarket is Ownable {
     // 直接成交
     function acceptBidForCity(uint256 tokenId, uint256 minPrice) public {
         require(
-            nftContract.ownerOf(tokenId) != msg.sender,
-            "You cannot accept a bid on your own city"
+            nftContract.ownerOf(tokenId) == msg.sender,
+            "not your city"
         );
+        require(nftContract.getApproved(tokenId) == address(this), "Not Approved");
         address seller = msg.sender;
         Bid storage bid = cityBids[tokenId];
         require(bid.hasBid, "no bids");
